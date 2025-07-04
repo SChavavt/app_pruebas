@@ -10,6 +10,7 @@ import boto3
 import re
 import os
 import gspread.utils
+import time
 import uuid
 
 st.set_page_config(page_title="Recepción de Pedidos TD", layout="wide")
@@ -97,7 +98,7 @@ def get_s3_client():
 # Initialize clients globally
 try:
     gc = get_google_sheets_client()
-    st.write(f"Tipo de gc después de inicialización (GLOBAL): {type(gc)}")
+    # st.write(f"Tipo de gc después de inicialización (GLOBAL): {type(gc)}") # Línea de depuración eliminada
     s3_client = get_s3_client()
 except Exception as e:
     st.error(f"❌ Error general al autenticarse o inicializar clientes: {e}")
@@ -114,8 +115,7 @@ def load_data_from_gsheets(sheet_id, worksheet_name):
     Retorna el DataFrame, el objeto worksheet y los encabezados.
     """
     try:
-        st.write(f"Tipo de gc DENTRO de load_data_from_gsheets: {type(gc)}") # Línea de depuración
-        # CAMBIO CLAVE: Usar open_by_key en lugar de open_by_id
+        # st.write(f"Tipo de gc DENTRO de load_data_from_gsheets: {type(gc)}") # Línea de depuración eliminada
         spreadsheet = gc.open_by_key(sheet_id) 
         worksheet = spreadsheet.worksheet(worksheet_name)
 
@@ -444,7 +444,7 @@ def mostrar_pedido(df_main, idx, row, orden, categoria, icono, worksheet, header
     turno = row['Turno']
     surtidor = row['Surtidor']
 
-    st.markdown("---")
+    st.markdown(f"---")
     st.markdown(f"#### {icono} Pedido #{orden}: {id_pedido} - Cliente: {cliente} {f'(Folio: {folio_factura})' if folio_factura else ''}")
     
     col1, col2, col3 = st.columns([1, 1, 1])
@@ -648,15 +648,29 @@ if not df_main.empty:
         ~df_pendientes['Estado'].isin(['🟡 En Proceso'])
     ].copy()
 
-    # Pestañas principales
-    main_tabs = st.tabs([
+    # Define las etiquetas de las pestañas antes de pasarlas a st.tabs
+    tab_labels = [
         f"⏳ Pendientes Hoy ({len(df_pendientes_hoy)})",
         f"➡️ Pendientes Mañana ({len(df_pendientes_manana)})",
         f"⏰ Pendientes Pasados ({len(df_pendientes_pasados)})",
         f"⚙️ En Proceso ({len(df_en_proceso)})",
         f"📦 Pendientes de Proceso ({len(df_pendientes_proceso)})",
         f"✅ Historial Completados ({len(df_completados_historial)})"
-    ], key="main_tabs_app_a", on_change=lambda: st.session_state.update(active_main_tab_index=main_tabs.index(st.session_state.main_tabs_app_a)))
+    ]
+
+    # Define la función de callback para on_change
+    def update_active_main_tab_index():
+        # st.session_state.main_tabs_app_a contendrá la ETIQUETA de la pestaña seleccionada
+        selected_tab_label = st.session_state.main_tabs_app_a
+        try:
+            # Encuentra el índice de la etiqueta seleccionada en la lista original de etiquetas
+            st.session_state.active_main_tab_index = tab_labels.index(selected_tab_label)
+        except ValueError:
+            # Fallback si por alguna razón la etiqueta no se encuentra (no debería ocurrir con lógica correcta)
+            st.session_state.active_main_tab_index = 0
+
+    # Pestañas principales
+    main_tabs = st.tabs(tab_labels, key="main_tabs_app_a", on_change=update_active_main_tab_index)
 
     with main_tabs[0]: # ⏳ Pendientes Hoy
         st.markdown("### Pedidos Pendientes para HOY")
