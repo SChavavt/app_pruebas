@@ -1,3 +1,9 @@
-streamlit
+streamlit==1.46.0
+pandas==2.3.0
 gspread==5.12.2
-oauth2client==4.1.3
+google-auth==2.30.0 # Asegúrate de que esta librería esté instalada
+# oauth2client ya no es necesario si google-auth se usa para las credenciales
+boto3==1.38.44
+openpyxl==3.1.5
+XlsxWriter==3.2.3
+requests # Si lo usas para descargar archivos de S3, asegúrate de que esté
