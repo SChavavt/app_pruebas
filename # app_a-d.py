@@ -656,199 +656,208 @@ if not df_main.empty:
         f"✅ Historial Completados ({len(df_completados_historial)})"
     ]
 
-    # CAMBIO CLAVE: Eliminar el callback on_change y obtener la pestaña seleccionada directamente
-    selected_tab_label = st.tabs(tab_labels, key="main_tabs_app_a")
-
-    # Actualizar el índice activo en session_state basado en la etiqueta seleccionada
-    try:
-        st.session_state.active_main_tab_index = tab_labels.index(selected_tab_label)
-    except ValueError:
-        # Esto debería ocurrir solo si la etiqueta seleccionada no se encuentra (caso raro)
+    # Initialize active_main_tab_index if not already set
+    if "active_main_tab_index" not in st.session_state:
         st.session_state.active_main_tab_index = 0
 
+    # Define the on_change callback. It needs to be defined BEFORE st.tabs is called.
+    def update_main_tab_index():
+        # When a tab is clicked, st.session_state.main_tabs_app_a will hold the LABEL of the clicked tab.
+        # We find its index in our `tab_labels` list.
+        try:
+            st.session_state.active_main_tab_index = tab_labels.index(st.session_state.main_tabs_app_a)
+        except ValueError:
+            # Fallback in case the label isn't found (shouldn't happen with correct logic)
+            st.session_state.active_main_tab_index = 0
 
-    # Ahora usamos st.session_state.active_main_tab_index para controlar qué pestaña se muestra
-    with main_tabs[st.session_state.active_main_tab_index]: # Usar el índice del session_state
-        if st.session_state.active_main_tab_index == 0: # ⏳ Pendientes Hoy
-            st.markdown("### Pedidos Pendientes para HOY")
+    # Create the tabs. `st.tabs` returns a list of DeltaGenerator objects.
+    # `index` sets the initially selected tab.
+    # `on_change` updates the `active_main_tab_index` when a tab is clicked.
+    main_tabs_objects = st.tabs(tab_labels, key="main_tabs_app_a",
+                                 index=st.session_state.active_main_tab_index,
+                                 on_change=update_main_tab_index)
+
+    # Ahora usamos main_tabs_objects para controlar qué pestaña se muestra
+    with main_tabs_objects[0]: # ⏳ Pendientes Hoy
+        st.markdown("### Pedidos Pendientes para HOY")
+        
+        # Filtrar por Tipo de Envío para "Pendientes Hoy"
+        tipo_envio_hoy = st.selectbox(
+            "Filtrar por Tipo de Envío (Hoy)",
+            ["Todos", "📍 Pedido Local", "🚚 Pedido Foráneo", "🛠 Garantía", "🔁 Devolución", "📬 Solicitud de guía"],
+            key="filtro_tipo_envio_hoy"
+        )
+        if tipo_envio_hoy != "Todos":
+            df_pendientes_hoy = df_pendientes_hoy[df_pendientes_hoy['Tipo_Envio'] == tipo_envio_hoy].copy()
+
+        if not df_pendientes_hoy.empty:
+            df_pendientes_hoy_sorted = ordenar_pedidos_custom(df_pendientes_hoy)
+            # Organizar por Turno
+            turnos_hoy = ["☀️ Local Mañana", "🌙 Local Tarde", "🌵 Saltillo", "� Pasa a Bodega", "N/A"] # N/A para foráneos/garantías etc.
+            tab_titles_hoy = [f"{t} ({len(df_pendientes_hoy_sorted[df_pendientes_hoy_sorted['Turno'] == t])})" for t in turnos_hoy]
+            tabs_hoy = st.tabs(tab_titles_hoy, key="tabs_pendientes_hoy") # Usar un key único
+
+            for i, turno_val in enumerate(turnos_hoy):
+                with tabs_hoy[i]:
+                    pedidos_por_turno = df_pendientes_hoy_sorted[df_pendientes_hoy_sorted['Turno'] == turno_val]
+                    if not pedidos_por_turno.empty:
+                        for orden, (idx, row) in enumerate(pedidos_por_turno.iterrows(), start=1):
+                            icono = "☀️" if "Mañana" in turno_val else "🌙" if "Tarde" in turno_val else "🌵" if "Saltillo" in turno_val else "📦" if "Bodega" in turno_val else "🚚" # Icono más genérico para N/A
+                            mostrar_pedido(df_main, idx, row, orden, f"Pendientes Hoy - {turno_val}", icono, worksheet_main, headers_main)
+                    else:
+                        st.info(f"No hay pedidos pendientes para HOY en el turno: {turno_val}")
+        else:
+            st.info("No hay pedidos pendientes para HOY.")
+
+    with main_tabs_objects[1]: # ➡️ Pendientes Mañana
+        st.markdown("### Pedidos Pendientes para MAÑANA")
+        
+        # Filtrar por Tipo de Envío para "Pendientes Mañana"
+        tipo_envio_manana = st.selectbox(
+            "Filtrar por Tipo de Envío (Mañana)",
+            ["Todos", "📍 Pedido Local", "🚚 Pedido Foráneo", "🛠 Garantía", "🔁 Devolución", "📬 Solicitud de guía"],
+            key="filtro_tipo_envio_manana"
+        )
+        if tipo_envio_manana != "Todos":
+            df_pendientes_manana = df_pendientes_manana[df_pendientes_manana['Tipo_Envio'] == tipo_envio_manana].copy()
+
+        if not df_pendientes_manana.empty:
+            df_pendientes_manana_sorted = ordenar_pedidos_custom(df_pendientes_manana)
+            turnos_manana = ["☀️ Local Mañana", "🌙 Local Tarde", "🌵 Saltillo", "📦 Pasa a Bodega", "N/A"] # N/A para foráneos/garantías etc.
+            tab_titles_manana = [f"{t} ({len(df_pendientes_manana_sorted[df_pendientes_manana_sorted['Turno'] == t])})" for t in turnos_manana]
+            tabs_manana = st.tabs(tab_titles_manana, key="tabs_pendientes_manana") # Usar un key único
+
+            for i, turno_val in enumerate(turnos_manana):
+                with tabs_manana[i]:
+                    pedidos_por_turno = df_pendientes_manana_sorted[df_pendientes_manana_sorted['Turno'] == turno_val]
+                    if not pedidos_por_turno.empty:
+                        for orden, (idx, row) in enumerate(pedidos_por_turno.iterrows(), start=1):
+                            icono = "☀️" if "Mañana" in turno_val else "🌙" if "Tarde" in turno_val else "🌵" if "Saltillo" in turno_val else "📦" if "Bodega" in turno_val else "🚚"
+                            mostrar_pedido(df_main, idx, row, orden, f"Pendientes Mañana - {turno_val}", icono, worksheet_main, headers_main)
+                    else:
+                        st.info(f"No hay pedidos pendientes para MAÑANA en el turno: {turno_val}")
+        else:
+            st.info("No hay pedidos pendientes para MAÑANA.")
+
+    with main_tabs_objects[2]: # ⏰ Pendientes Pasados
+        st.markdown("### Pedidos Pendientes con Fecha de Entrega Pasada")
+        
+        # Filtrar por Tipo de Envío para "Pendientes Pasados"
+        tipo_envio_pasados = st.selectbox(
+            "Filtrar por Tipo de Envío (Pasados)",
+            ["Todos", "📍 Pedido Local", "🚚 Pedido Foráneo", "🛠 Garantía", "🔁 Devolución", "📬 Solicitud de guía"],
+            key="filtro_tipo_envio_pasados"
+        )
+        if tipo_envio_pasados != "Todos":
+            df_pendientes_pasados = df_pendientes_pasados[df_pendientes_pasados['Tipo_Envio'] == tipo_envio_pasados].copy()
+
+        if not df_pendientes_pasados.empty:
+            df_pendientes_pasados_sorted = ordenar_pedidos_custom(df_pendientes_pasados)
+            for orden, (idx, row) in enumerate(df_pendientes_pasados_sorted.iterrows(), start=1):
+                mostrar_pedido(df_main, idx, row, orden, "Pendientes Pasados", "⏰", worksheet_main, headers_main)
+        else:
+            st.info("No hay pedidos pendientes con fecha de entrega pasada.")
+
+    with main_tabs_objects[3]: # ⚙️ En Proceso
+        st.markdown("### Pedidos Actualmente EN PROCESO")
+        
+        # Filtrar por Tipo de Envío para "En Proceso"
+        tipo_envio_en_proceso = st.selectbox(
+            "Filtrar por Tipo de Envío (En Proceso)",
+            ["Todos", "📍 Pedido Local", "🚚 Pedido Foráneo", "🛠 Garantía", "🔁 Devolución", "📬 Solicitud de guía"],
+            key="filtro_tipo_envio_en_proceso"
+        )
+        if tipo_envio_en_proceso != "Todos":
+            df_en_proceso = df_en_proceso[df_en_proceso['Tipo_Envio'] == tipo_envio_en_proceso].copy()
+
+        if not df_en_proceso.empty:
+            df_en_proceso_sorted = ordenar_pedidos_custom(df_en_proceso)
+            for orden, (idx, row) in enumerate(df_en_proceso_sorted.iterrows(), start=1):
+                mostrar_pedido(df_main, idx, row, orden, "En Proceso", "⚙️", worksheet_main, headers_main)
+        else:
+            st.info("No hay pedidos actualmente en proceso.")
+
+    with main_tabs_objects[4]: # 📦 Pendientes de Proceso (Todo lo demás)
+        st.markdown("### Pedidos Pendientes de Ser Procesados (General)")
+        st.info("Esta sección muestra todos los pedidos que no están 'Completados', 'Cancelados' ni 'En Proceso'.")
+
+        # Filtrar por Tipo de Envío para "Pendientes de Proceso"
+        tipo_envio_pendientes_proceso = st.selectbox(
+            "Filtrar por Tipo de Envío (Pendientes de Proceso)",
+            ["Todos", "📍 Pedido Local", "🚚 Pedido Foráneo", "🛠 Garantía", "🔁 Devolución", "📬 Solicitud de guía"],
+            key="filtro_tipo_envio_pendientes_proceso"
+        )
+        if tipo_envio_pendientes_proceso != "Todos":
+            df_pendientes_proceso = df_pendientes_proceso[df_pendientes_proceso['Tipo_Envio'] == tipo_envio_pendientes_proceso].copy()
+
+        if not df_pendientes_proceso.empty:
+            df_pendientes_proceso_sorted = ordenar_pedidos_custom(df_pendientes_proceso)
+            # Mostrar primero los pedidos locales por turno
+            st.subheader("Pedidos Locales")
+            turnos_proceso = ["☀️ Local Mañana", "🌙 Local Tarde", "🌵 Saltillo", "📦 Pasa a Bodega", "N/A"]
             
-            # Filtrar por Tipo de Envío para "Pendientes Hoy"
-            tipo_envio_hoy = st.selectbox(
-                "Filtrar por Tipo de Envío (Hoy)",
-                ["Todos", "📍 Pedido Local", "🚚 Pedido Foráneo", "🛠 Garantía", "🔁 Devolución", "📬 Solicitud de guía"],
-                key="filtro_tipo_envio_hoy"
-            )
-            if tipo_envio_hoy != "Todos":
-                df_pendientes_hoy = df_pendientes_hoy[df_pendientes_hoy['Tipo_Envio'] == tipo_envio_hoy].copy()
-
-            if not df_pendientes_hoy.empty:
-                df_pendientes_hoy_sorted = ordenar_pedidos_custom(df_pendientes_hoy)
-                # Organizar por Turno
-                turnos_hoy = ["☀️ Local Mañana", "🌙 Local Tarde", "🌵 Saltillo", "📦 Pasa a Bodega", "N/A"] # N/A para foráneos/garantías etc.
-                tab_titles_hoy = [f"{t} ({len(df_pendientes_hoy_sorted[df_pendientes_hoy_sorted['Turno'] == t])})" for t in turnos_hoy]
-                tabs_hoy = st.tabs(tab_titles_hoy, key="tabs_pendientes_hoy") # Usar un key único
-
-                for i, turno_val in enumerate(turnos_hoy):
-                    with tabs_hoy[i]:
-                        pedidos_por_turno = df_pendientes_hoy_sorted[df_pendientes_hoy_sorted['Turno'] == turno_val]
-                        if not pedidos_por_turno.empty:
-                            for orden, (idx, row) in enumerate(pedidos_por_turno.iterrows(), start=1):
-                                icono = "☀️" if "Mañana" in turno_val else "🌙" if "Tarde" in turno_val else "🌵" if "Saltillo" in turno_val else "📦" if "Bodega" in turno_val else "🚚" # Icono más genérico para N/A
-                                mostrar_pedido(df_main, idx, row, orden, f"Pendientes Hoy - {turno_val}", icono, worksheet_main, headers_main)
-                        else:
-                            st.info(f"No hay pedidos pendientes para HOY en el turno: {turno_val}")
-            else:
-                st.info("No hay pedidos pendientes para HOY.")
-
-        elif st.session_state.active_main_tab_index == 1: # ➡️ Pendientes Mañana
-            st.markdown("### Pedidos Pendientes para MAÑANA")
-            
-            # Filtrar por Tipo de Envío para "Pendientes Mañana"
-            tipo_envio_manana = st.selectbox(
-                "Filtrar por Tipo de Envío (Mañana)",
-                ["Todos", "📍 Pedido Local", "🚚 Pedido Foráneo", "🛠 Garantía", "🔁 Devolución", "📬 Solicitud de guía"],
-                key="filtro_tipo_envio_manana"
-            )
-            if tipo_envio_manana != "Todos":
-                df_pendientes_manana = df_pendientes_manana[df_pendientes_manana['Tipo_Envio'] == tipo_envio_manana].copy()
-
-            if not df_pendientes_manana.empty:
-                df_pendientes_manana_sorted = ordenar_pedidos_custom(df_pendientes_manana)
-                turnos_manana = ["☀️ Local Mañana", "🌙 Local Tarde", "🌵 Saltillo", "📦 Pasa a Bodega", "N/A"] # N/A para foráneos/garantías etc.
-                tab_titles_manana = [f"{t} ({len(df_pendientes_manana_sorted[df_pendientes_manana_sorted['Turno'] == t])})" for t in turnos_manana]
-                tabs_manana = st.tabs(tab_titles_manana, key="tabs_pendientes_manana") # Usar un key único
-
-                for i, turno_val in enumerate(turnos_manana):
-                    with tabs_manana[i]:
-                        pedidos_por_turno = df_pendientes_manana_sorted[df_pendientes_manana_sorted['Turno'] == turno_val]
-                        if not pedidos_por_turno.empty:
-                            for orden, (idx, row) in enumerate(pedidos_por_turno.iterrows(), start=1):
-                                icono = "☀️" if "Mañana" in turno_val else "🌙" if "Tarde" in turno_val else "🌵" if "Saltillo" in turno_val else "📦" if "Bodega" in turno_val else "🚚"
-                                mostrar_pedido(df_main, idx, row, orden, f"Pendientes Mañana - {turno_val}", icono, worksheet_main, headers_main)
-                        else:
-                            st.info(f"No hay pedidos pendientes para MAÑANA en el turno: {turno_val}")
-            else:
-                st.info("No hay pedidos pendientes para MAÑANA.")
-
-        elif st.session_state.active_main_tab_index == 2: # ⏰ Pendientes Pasados
-            st.markdown("### Pedidos Pendientes con Fecha de Entrega Pasada")
-            
-            # Filtrar por Tipo de Envío para "Pendientes Pasados"
-            tipo_envio_pasados = st.selectbox(
-                "Filtrar por Tipo de Envío (Pasados)",
-                ["Todos", "📍 Pedido Local", "🚚 Pedido Foráneo", "🛠 Garantía", "🔁 Devolución", "📬 Solicitud de guía"],
-                key="filtro_tipo_envio_pasados"
-            )
-            if tipo_envio_pasados != "Todos":
-                df_pendientes_pasados = df_pendientes_pasados[df_pendientes_pasados['Tipo_Envio'] == tipo_envio_pasados].copy()
-
-            if not df_pendientes_pasados.empty:
-                df_pendientes_pasados_sorted = ordenar_pedidos_custom(df_pendientes_pasados)
-                for orden, (idx, row) in enumerate(df_pendientes_pasados_sorted.iterrows(), start=1):
-                    mostrar_pedido(df_main, idx, row, orden, "Pendientes Pasados", "⏰", worksheet_main, headers_main)
-            else:
-                st.info("No hay pedidos pendientes con fecha de entrega pasada.")
-
-        elif st.session_state.active_main_tab_index == 3: # ⚙️ En Proceso
-            st.markdown("### Pedidos Actualmente EN PROCESO")
-            
-            # Filtrar por Tipo de Envío para "En Proceso"
-            tipo_envio_en_proceso = st.selectbox(
-                "Filtrar por Tipo de Envío (En Proceso)",
-                ["Todos", "📍 Pedido Local", "🚚 Pedido Foráneo", "🛠 Garantía", "🔁 Devolución", "📬 Solicitud de guía"],
-                key="filtro_tipo_envio_en_proceso"
-            )
-            if tipo_envio_en_proceso != "Todos":
-                df_en_proceso = df_en_proceso[df_en_proceso['Tipo_Envio'] == tipo_envio_en_proceso].copy()
-
-            if not df_en_proceso.empty:
-                df_en_proceso_sorted = ordenar_pedidos_custom(df_en_proceso)
-                for orden, (idx, row) in enumerate(df_en_proceso_sorted.iterrows(), start=1):
-                    mostrar_pedido(df_main, idx, row, orden, "En Proceso", "⚙️", worksheet_main, headers_main)
-            else:
-                st.info("No hay pedidos actualmente en proceso.")
-
-        elif st.session_state.active_main_tab_index == 4: # 📦 Pendientes de Proceso (Todo lo demás)
-            st.markdown("### Pedidos Pendientes de Ser Procesados (General)")
-            st.info("Esta sección muestra todos los pedidos que no están 'Completados', 'Cancelados' ni 'En Proceso'.")
-
-            # Filtrar por Tipo de Envío para "Pendientes de Proceso"
-            tipo_envio_pendientes_proceso = st.selectbox(
-                "Filtrar por Tipo de Envío (Pendientes de Proceso)",
-                ["Todos", "📍 Pedido Local", "🚚 Pedido Foráneo", "🛠 Garantía", "🔁 Devolución", "📬 Solicitud de guía"],
-                key="filtro_tipo_envio_pendientes_proceso"
-            )
-            if tipo_envio_pendientes_proceso != "Todos":
-                df_pendientes_proceso = df_pendientes_proceso[df_pendientes_proceso['Tipo_Envio'] == tipo_envio_pendientes_proceso].copy()
-
-            if not df_pendientes_proceso.empty:
-                df_pendientes_proceso_sorted = ordenar_pedidos_custom(df_pendientes_proceso)
-                # Mostrar primero los pedidos locales por turno
-                st.subheader("Pedidos Locales")
-                turnos_proceso = ["☀️ Local Mañana", "🌙 Local Tarde", "🌵 Saltillo", "📦 Pasa a Bodega", "N/A"]
+            for turno_val in turnos_proceso:
+                pedidos_local_turno = df_pendientes_proceso_sorted[
+                    (df_pendientes_proceso_sorted['Tipo_Envio'] == "📍 Pedido Local") & 
+                    (df_pendientes_proceso_sorted['Turno'] == turno_val)
+                ].copy()
                 
-                for turno_val in turnos_proceso:
-                    pedidos_local_turno = df_pendientes_proceso_sorted[
-                        (df_pendientes_proceso_sorted['Tipo_Envio'] == "📍 Pedido Local") & 
-                        (df_pendientes_proceso_sorted['Turno'] == turno_val)
-                    ].copy()
-                    
-                    if not pedidos_local_turno.empty:
-                        st.markdown(f"##### {turno_val} ({len(pedidos_local_turno)} pedidos)")
-                        for orden, (idx, row) in enumerate(pedidos_local_turno.iterrows(), start=1):
-                            icono = "☀️" if "Mañana" in turno_val else "🌙" if "Tarde" in turno_val else "🌵" if "Saltillo" in turno_val else "📦" if "Bodega" in turno_val else ""
-                            mostrar_pedido(df_main, idx, row, orden, "Pedido Local", icono, worksheet_main, headers_main)
-                    # else:
-                    #    st.info(f"No hay pedidos locales pendientes para el turno: {turno_val}")
+                if not pedidos_local_turno.empty:
+                    st.markdown(f"##### {turno_val} ({len(pedidos_local_turno)} pedidos)")
+                    for orden, (idx, row) in enumerate(pedidos_local_turno.iterrows(), start=1):
+                        icono = "☀️" if "Mañana" in turno_val else "🌙" if "Tarde" in turno_val else "🌵" if "Saltillo" in turno_val else "📦" if "Bodega" in turno_val else ""
+                        mostrar_pedido(df_main, idx, row, orden, "Pedido Local", icono, worksheet_main, headers_main)
+                # else:
+                #    st.info(f"No hay pedidos locales pendientes para el turno: {turno_val}")
 
-                # Luego, el resto de los tipos de envío (Foráneos, Garantías, Devoluciones, Solicitudes de guía)
-                st.subheader("Otros Tipos de Envío")
-                
-                foraneo_display = df_pendientes_proceso_sorted[(df_pendientes_proceso_sorted["Tipo_Envio"] == "🚚 Pedido Foráneo")].copy()
-                if not foraneo_display.empty:
-                    for orden, (idx, row) in enumerate(foraneo_display.iterrows(), start=1):
-                        mostrar_pedido(df_main, idx, row, orden, "Pedido Foráneo", "🚚", worksheet_main, headers_main)
-                else:
-                    st.info("No hay pedidos foráneos pendientes.")
-
-                garantias_display = df_pendientes_proceso_sorted[(df_pendientes_proceso_sorted["Tipo_Envio"] == "🛠 Garantía")].copy()
-                if not garantias_display.empty:
-                    for orden, (idx, row) in enumerate(garantias_display.iterrows(), start=1):
-                        mostrar_pedido(df_main, idx, row, orden, "Garantía", "🛠", worksheet_main, headers_main)
-                else:
-                    st.info("No hay garantías pendientes.")
-                
-                devoluciones_display = df_pendientes_proceso_sorted[(df_pendientes_proceso_sorted["Tipo_Envio"] == "🔁 Devolución")].copy()
-                if not devoluciones_display.empty:
-                    for orden, (idx, row) in enumerate(devoluciones_display.iterrows(), start=1):
-                        mostrar_pedido(df_main, idx, row, orden, "Devolución", "🔁", worksheet_main, headers_main)
-                else:
-                    st.info("No hay devoluciones pendientes.")
-
-                solicitudes_display = df_pendientes_proceso_sorted[(df_pendientes_proceso_sorted["Tipo_Envio"] == "📬 Solicitud de guía")].copy()
-                if not solicitudes_display.empty:
-                    for orden, (idx, row) in enumerate(solicitudes_display.iterrows(), start=1):
-                        mostrar_pedido(df_main, idx, row, orden, "Solicitud de Guía", "📬", worksheet_main, headers_main)
-                else:
-                    st.info("No hay solicitudes de guía.")
-
+            # Luego, el resto de los tipos de envío (Foráneos, Garantías, Devoluciones, Solicitudes de guía)
+            st.subheader("Otros Tipos de Envío")
+            
+            foraneo_display = df_pendientes_proceso_sorted[(df_pendientes_proceso_sorted["Tipo_Envio"] == "🚚 Pedido Foráneo")].copy()
+            if not foraneo_display.empty:
+                for orden, (idx, row) in enumerate(foraneo_display.iterrows(), start=1):
+                    mostrar_pedido(df_main, idx, row, orden, "Pedido Foráneo", "🚚", worksheet_main, headers_main)
             else:
-                st.info("No hay pedidos pendientes de proceso.")
+                st.info("No hay pedidos foráneos pendientes.")
 
-        elif st.session_state.active_main_tab_index == 5: # ✅ Historial Completados
-            st.markdown("### Historial de Pedidos Completados")
-            if not df_completados_historial.empty:
-                st.dataframe(
-                    df_completados_historial[[
-                        'ID_Pedido', 'Folio_Factura', 'Cliente', 'Estado', 'Vendedor_Registro',
-                        'Tipo_Envio', 'Fecha_Entrega', 'Fecha_Completado', 'Notas', 'Modificacion_Surtido',
-                        'Adjuntos', 'Adjuntos_Surtido', 'Turno'
-                    ]].head(50),
-                    use_container_width=True, hide_index=True
-                )
-                st.info("Mostrando los 50 pedidos completados más recientes. Puedes ajustar este límite si es necesario.")
+            garantias_display = df_pendientes_proceso_sorted[(df_pendientes_proceso_sorted["Tipo_Envio"] == "🛠 Garantía")].copy()
+            if not garantias_display.empty:
+                for orden, (idx, row) in enumerate(garantias_display.iterrows(), start=1):
+                    mostrar_pedido(df_main, idx, row, orden, "Garantía", "🛠", worksheet_main, headers_main)
             else:
-                st.info("No hay pedidos completados en el historial.")
+                st.info("No hay garantías pendientes.")
+            
+            devoluciones_display = df_pendientes_proceso_sorted[(df_pendientes_proceso_sorted["Tipo_Envio"] == "🔁 Devolución")].copy()
+            if not devoluciones_display.empty:
+                for orden, (idx, row) in enumerate(devoluciones_display.iterrows(), start=1):
+                    mostrar_pedido(df_main, idx, row, orden, "Devolución", "🔁", worksheet_main, headers_main)
+            else:
+                st.info("No hay devoluciones pendientes.")
+
+            solicitudes_display = df_pendientes_proceso_sorted[(df_pendientes_proceso_sorted["Tipo_Envio"] == "📬 Solicitud de guía")].copy()
+            if not solicitudes_display.empty:
+                for orden, (idx, row) in enumerate(solicitudes_display.iterrows(), start=1):
+                    mostrar_pedido(df_main, idx, row, orden, "Solicitud de Guía", "📬", worksheet_main, headers_main)
+            else:
+                st.info("No hay solicitudes de guía.")
+
+        else:
+            st.info("No hay pedidos pendientes de proceso.")
+
+    with main_tabs_objects[5]: # ✅ Historial Completados
+        st.markdown("### Historial de Pedidos Completados")
+        if not df_completados_historial.empty:
+            st.dataframe(
+                df_completados_historial[[
+                    'ID_Pedido', 'Folio_Factura', 'Cliente', 'Estado', 'Vendedor_Registro',
+                    'Tipo_Envio', 'Fecha_Entrega', 'Fecha_Completado', 'Notas', 'Modificacion_Surtido',
+                    'Adjuntos', 'Adjuntos_Surtido', 'Turno'
+                ]].head(50),
+                use_container_width=True, hide_index=True
+            )
+            st.info("Mostrando los 50 pedidos completados más recientes. Puedes ajustar este límite si es necesario.")
+        else:
+            st.info("No hay pedidos completados en el historial.")
 
 else:
     st.info("No se encontraron datos de pedidos en la hoja de Google Sheets. Asegúrate de que los datos se están subiendo correctamente y que el ID de la hoja y el nombre de la pestaña son correctos.")
